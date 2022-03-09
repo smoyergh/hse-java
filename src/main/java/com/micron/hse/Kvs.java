@@ -6,7 +6,6 @@
 package com.micron.hse;
 
 import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
 import java.util.EnumSet;
 import java.util.Optional;
 
@@ -31,9 +30,13 @@ public final class Kvs extends NativeObject implements AutoCloseable {
     private native void close(long kvsHandle) throws HseException;
     private native void delete(long kvsHandle, byte[] key, int keyLen, int flags,
         long txnHandle) throws HseException;
+    private native void delete(long kvsHandle, String key, int flags, long txnHandle)
+            throws HseException;
     private native void delete(long kvsHandle, ByteBuffer key, int keyLen, int keyPos,
         int flags, long txnHandle) throws HseException;
     private native byte[] get(long kvsHandle, byte[] key, int keyLen, int flags, long txnHandle)
+            throws HseException;
+    private native byte[] get(long kvsHandle, String key, int flags, long txnHandle)
             throws HseException;
     private native byte[] get(long kvsHandle, ByteBuffer key, int keyLen, int keyPos, int flags,
         long txnHandle) throws HseException;
@@ -41,6 +44,10 @@ public final class Kvs extends NativeObject implements AutoCloseable {
         int valueBufSz, int flags, long txnHandle) throws HseException;
     private native int get(long kvsHandle, byte[] key, int keyLen, ByteBuffer valueBuf,
         int valueBufSz, int valueBufPos, int flags, long txnHandle) throws HseException;
+    private native int get(long kvsHandle, String key, byte[] valueBuf, int valueBufSz, int flags,
+        long txnHandle) throws HseException;
+    private native int get(long kvsHandle, String key, ByteBuffer valueBuf, int valueBufSz,
+        int valueBufPos, int flags, long txnHandle) throws HseException;
     private native int get(long kvsHandle, ByteBuffer key, int keyLen, int keyPos,
         byte[] valueBuf, int valueBufSz, int flags, long txnHandle) throws HseException;
     private native int get(long kvsHandle, ByteBuffer key, int keyLen,
@@ -50,17 +57,29 @@ public final class Kvs extends NativeObject implements AutoCloseable {
     private native String getParam(long kvdbHandle, String param) throws HseException;
     private native void prefixDelete(long kvsHandle, byte[] pfx, int pfxLen, int flags,
         long txnHandle) throws HseException;
+    private native void prefixDelete(long kvsHandle, String pfx, int flags, long txnHandle)
+            throws HseException;
     private native void prefixDelete(long kvsHandle, ByteBuffer pfx, int pfxLen, int pfxPos,
         int flags, long txnHandle) throws HseException;
     private native void put(long kvsHandle, byte[] key, int keyLen, byte[] value, int valueLen,
         int flags, long txnHandle) throws HseException;
+    private native void put(long kvsHandle, byte[] key, int keyLen, String value, int flags,
+        long txnHandle) throws HseException;
     private native void put(long kvsHandle, byte[] key, int keyLen, ByteBuffer value, int valueLen,
         int valuePos, int flags, long txnHandle) throws HseException;
+    private native void put(long kvsHandle, String key, byte[] value, int valueLen, int flags,
+        long txnHandle) throws HseException;
+    private native void put(long kvsHandle, String key, String value, int flags, long txnHandle)
+            throws HseException;
+    private native void put(long kvsHandle, String key, ByteBuffer value, int valueLen,
+        int valuePos, int flags, long txnHandle) throws HseException;
+    private native void put(long kvsHandle, ByteBuffer key, int keyLen, int keyPos, byte[] value,
+        int valueLen, int flags, long txnHandle) throws HseException;
+    private native void put(long kvsHandle, ByteBuffer key, int keyLen, int keyPos, String value,
+        int flags, long txnHandle) throws HseException;
     private native void put(long kvsHandle, ByteBuffer key, int keyLen, int keyPos,
         ByteBuffer value, int valueLen, int valuePos, int flags, long txnHandle)
             throws HseException;
-    private native void put(long kvsHandle, ByteBuffer key, int keyLen, int keyPos, byte[] value,
-        int valueLen, int flags, long txnHandle) throws HseException;
 
     /**
      * Create a KVS within the referenced KVDB.
@@ -449,9 +468,7 @@ public final class Kvs extends NativeObject implements AutoCloseable {
      * @see #delete(String, KvdbTransaction)
      */
     public void delete(final String key) throws HseException {
-        final byte[] keyData = key == null ? null : key.getBytes(StandardCharsets.UTF_8);
-
-        delete(keyData, null);
+        delete(key, null);
     }
 
     /**
@@ -499,9 +516,9 @@ public final class Kvs extends NativeObject implements AutoCloseable {
      * @see #delete(byte[], KvdbTransaction)
      */
     public void delete(final String key, final KvdbTransaction txn) throws HseException {
-        final byte[] keyData = key == null ? null : key.getBytes(StandardCharsets.UTF_8);
+        final long txnHandle = txn == null ? 0 : txn.handle;
 
-        delete(keyData, txn);
+        delete(this.handle, key, 0, txnHandle);
     }
 
     /**
@@ -564,9 +581,7 @@ public final class Kvs extends NativeObject implements AutoCloseable {
      * @see #get(String, KvdbTransaction)
      */
     public Optional<byte[]> get(final String key) throws HseException {
-        final byte[] keyData = key == null ? null : key.getBytes(StandardCharsets.UTF_8);
-
-        return get(keyData);
+        return get(key, (KvdbTransaction) null);
     }
 
     /**
@@ -616,9 +631,9 @@ public final class Kvs extends NativeObject implements AutoCloseable {
      * @see #get(byte[], KvdbTransaction)
      */
     public Optional<byte[]> get(final String key, final KvdbTransaction txn) throws HseException {
-        final byte[] keyData = key == null ? null : key.getBytes(StandardCharsets.UTF_8);
+        final long txnHandle = txn == null ? 0 : txn.handle;
 
-        return get(keyData, txn);
+        return Optional.ofNullable(get(this.handle, key, 0, txnHandle));
     }
 
     /**
@@ -804,9 +819,15 @@ public final class Kvs extends NativeObject implements AutoCloseable {
      */
     public Optional<Integer> get(final String key, final byte[] valueBuf, final KvdbTransaction txn)
             throws HseException {
-        final byte[] keyData = key == null ? null : key.getBytes(StandardCharsets.UTF_8);
+        final int valueBufSz = valueBuf == null ? 0 : valueBuf.length;
+        final long txnHandle = txn == null ? 0 : txn.handle;
 
-        return get(keyData, valueBuf, txn);
+        final int packedValueLen = get(this.handle, key, valueBuf, valueBufSz, 0,
+            txnHandle);
+        final boolean found = (packedValueLen & 0b1) == 1;
+        final int valueLen = packedValueLen >> 1;
+
+        return found ? Optional.of(valueLen) : Optional.empty();
     }
 
     /**
@@ -926,9 +947,32 @@ public final class Kvs extends NativeObject implements AutoCloseable {
      */
     public Optional<Integer> get(final String key, final ByteBuffer valueBuf,
             final KvdbTransaction txn) throws HseException {
-        final byte[] keyData = key == null ? null : key.getBytes(StandardCharsets.UTF_8);
+        int valueBufSz = 0;
+        int valueBufPos = 0;
+        if (valueBuf != null) {
+            assert valueBuf.isDirect();
 
-        return get(keyData, valueBuf, txn);
+            valueBufSz = valueBuf.remaining();
+            valueBufPos = valueBuf.position();
+        }
+
+        final long txnHandle = txn == null ? 0 : txn.handle;
+
+        final int packedValueLen = get(this.handle, key, valueBuf, valueBufSz, valueBufPos, 0,
+            txnHandle);
+        final boolean found = (packedValueLen & 0b1) == 1;
+
+        if (!found) {
+            return Optional.empty();
+        }
+
+        final int valueLen = packedValueLen >> 1;
+
+        if (valueBuf != null) {
+            valueBuf.limit(Math.min(valueBuf.limit(), valueLen + valueBufPos));
+        }
+
+        return Optional.of(valueLen);
     }
 
     /**
@@ -1103,9 +1147,9 @@ public final class Kvs extends NativeObject implements AutoCloseable {
      * @see #prefixDelete(byte[], KvdbTransaction)
      */
     public void prefixDelete(final String pfx, final KvdbTransaction txn) throws HseException {
-        final byte[] pfxData = pfx == null ? null : pfx.getBytes(StandardCharsets.UTF_8);
+        final long txnHandle = txn == null ? 0 : txn.handle;
 
-        prefixDelete(pfxData, txn);
+        prefixDelete(this.handle, pfx, 0, txnHandle);
     }
 
     /**
@@ -1636,9 +1680,14 @@ public final class Kvs extends NativeObject implements AutoCloseable {
      */
     public void put(final byte[] key, final String value, final EnumSet<PutFlags> flags,
             final KvdbTransaction txn) throws HseException {
-        final byte[] valueData = value == null ? null : value.getBytes(StandardCharsets.UTF_8);
+        final int keyLen = key == null ? 0 : key.length;
 
-        put(key, valueData, flags, txn);
+        final int flagsValue = flags == null ? 0 : flags.stream()
+            .mapToInt(flag -> 1 << flag.ordinal())
+            .sum();
+        final long txnHandle = txn == null ? 0 : txn.handle;
+
+        put(this.handle, key, keyLen, value, flagsValue, txnHandle);
     }
 
     /**
@@ -1695,9 +1744,14 @@ public final class Kvs extends NativeObject implements AutoCloseable {
      */
     public void put(final String key, final byte[] value, final EnumSet<PutFlags> flags,
             final KvdbTransaction txn) throws HseException {
-        final byte[] keyData = key == null ? null : key.getBytes(StandardCharsets.UTF_8);
+        final int valueLen = value == null ? 0 : value.length;
 
-        put(keyData, value, flags, txn);
+        final int flagsValue = flags == null ? 0 : flags.stream()
+            .mapToInt(flag -> 1 << flag.ordinal())
+            .sum();
+        final long txnHandle = txn == null ? 0 : txn.handle;
+
+        put(this.handle, key, value, valueLen, flagsValue, txnHandle);
     }
 
     /**
@@ -1714,10 +1768,12 @@ public final class Kvs extends NativeObject implements AutoCloseable {
      */
     public void put(final String key, final String value, final EnumSet<PutFlags> flags,
             final KvdbTransaction txn) throws HseException {
-        final byte[] keyData = key == null ? null : key.getBytes(StandardCharsets.UTF_8);
-        final byte[] valueData = value == null ? null : value.getBytes(StandardCharsets.UTF_8);
+        final int flagsValue = flags == null ? 0 : flags.stream()
+            .mapToInt(flag -> 1 << flag.ordinal())
+            .sum();
+        final long txnHandle = txn == null ? 0 : txn.handle;
 
-        put(keyData, valueData, flags, txn);
+        put(this.handle, key, value, flagsValue, txnHandle);
     }
 
     /**
@@ -1734,9 +1790,21 @@ public final class Kvs extends NativeObject implements AutoCloseable {
      */
     public void put(final String key, final ByteBuffer value, final EnumSet<PutFlags> flags,
             final KvdbTransaction txn) throws HseException {
-        final byte[] keyData = key == null ? null : key.getBytes(StandardCharsets.UTF_8);
+        int valueLen = 0;
+        int valuePos = 0;
+        if (value != null) {
+            assert value.isDirect();
 
-        put(keyData, value, flags, txn);
+            valueLen = value.remaining();
+            valuePos = value.position();
+        }
+
+        final int flagsValue = flags == null ? 0 : flags.stream()
+            .mapToInt(flag -> 1 << flag.ordinal())
+            .sum();
+        final long txnHandle = txn == null ? 0 : txn.handle;
+
+        put(this.handle, key, value, valueLen, valuePos, flagsValue, txnHandle);
     }
 
     /**
@@ -1801,9 +1869,23 @@ public final class Kvs extends NativeObject implements AutoCloseable {
      */
     public void put(final ByteBuffer key, final String value,
             final EnumSet<PutFlags> flags, final KvdbTransaction txn) throws HseException {
-        final byte[] valueData = value == null ? null : value.getBytes(StandardCharsets.UTF_8);
+        int keyLen = 0;
+        int keyPos = 0;
+        if (key != null) {
+            assert key.isDirect();
 
-        put(key, valueData, flags, txn);
+            keyLen = key.remaining();
+            keyPos = key.position();
+
+            key.position(key.limit());
+        }
+
+        final int flagsValue = flags == null ? 0 : flags.stream()
+            .mapToInt(flag -> 1 << flag.ordinal())
+            .sum();
+        final long txnHandle = txn == null ? 0 : txn.handle;
+
+        put(this.handle, key, keyLen, keyPos, value, flagsValue, txnHandle);
     }
 
     /**
